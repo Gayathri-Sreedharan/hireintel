@@ -1,0 +1,24 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Google OAuth credentials and tokens
+google-oauth-client.json
+.gmail-refresh-token
+
+# Generated reports
+reports/
+*.csv
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Supabase local files
+supabase/.temp/
