@@ -3,9 +3,6 @@ name: HireIntel Daily Job Sourcing
 on:
   workflow_dispatch:
 
-  schedule:
-    - cron: "*/5 * * * *"
-
 jobs:
   hireintel:
     name: Run HireIntel
@@ -14,6 +11,7 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
       APIFY_MONTHLY_LIMIT_USD: ${{ secrets.APIFY_MONTHLY_LIMIT_USD }}
 
@@ -25,9 +23,9 @@ jobs:
 
       HIREINTEL_MAX_KEYWORDS: "1"
       HIREINTEL_MAX_JOBS_PER_KEYWORD: "1"
-      HIREINTEL_DRY_RUN: "true"
-      HIREINTEL_SAVE_TO_DATABASE: "false"
-      HIREINTEL_SEND_EMAIL_REPORT: "false"
+      HIREINTEL_DRY_RUN: "false"
+      HIREINTEL_SAVE_TO_DATABASE: "true"
+      HIREINTEL_SEND_EMAIL_REPORT: "true"
 
     steps:
       - name: Checkout HireIntel
