@@ -30,6 +30,7 @@
  * Safety controls:
  *
  * HIREINTEL_MAX_KEYWORDS
+ * HIREINTEL_CUSTOM_KEYWORD
  * HIREINTEL_DRY_RUN
  *
  * ================================================
@@ -58,7 +59,6 @@ const {
   getIndiaDateString
 } = require("./email/createJobCsv");
 
-
 /**
  * ================================================
  * CONFIGURATION
@@ -79,6 +79,11 @@ const MAX_KEYWORDS =
   Number(
     process.env.HIREINTEL_MAX_KEYWORDS || 0
   );
+
+const CUSTOM_KEYWORD =
+  String(
+    process.env.HIREINTEL_CUSTOM_KEYWORD || ""
+  ).trim();
 
 const DRY_RUN =
   process.env.HIREINTEL_DRY_RUN === "true";
@@ -101,7 +106,6 @@ const MAX_TOTAL_CHARGE_USD =
 
 const SEND_EMAIL_REPORT =
   process.env.HIREINTEL_SEND_EMAIL_REPORT !== "false";
-
 
 /**
  * ================================================
@@ -127,10 +131,12 @@ function getUniqueKeywords() {
   ];
 }
 
-
 /**
  * ================================================
  * GET ACTIVE KEYWORDS
+ *
+ * CUSTOM_KEYWORD takes priority over the
+ * configured keyword list.
  *
  * MAX_KEYWORDS = 0 means use ALL keywords.
  * ================================================
@@ -139,6 +145,12 @@ function getUniqueKeywords() {
 function getActiveKeywords() {
   const keywords =
     getUniqueKeywords();
+
+  if (CUSTOM_KEYWORD) {
+    return [
+      CUSTOM_KEYWORD
+    ];
+  }
 
   if (
     !Number.isFinite(MAX_KEYWORDS) ||
@@ -158,7 +170,6 @@ function getActiveKeywords() {
     MAX_KEYWORDS
   );
 }
-
 
 /**
  * ================================================
@@ -212,7 +223,6 @@ function validateConfiguration() {
   }
 }
 
-
 /**
  * ================================================
  * CREATE EMPTY REPORT
@@ -249,7 +259,9 @@ function createReport(
       activeKeywords.length,
 
     keywordLimit:
-      MAX_KEYWORDS,
+      CUSTOM_KEYWORD
+        ? "CUSTOM"
+        : MAX_KEYWORDS,
 
     completedKeywords:
       0,
@@ -301,7 +313,6 @@ function createReport(
       }
   };
 }
-
 
 /**
  * ================================================
@@ -368,7 +379,6 @@ function addSourceResult(
       )
   });
 }
-
 
 /**
  * ================================================
@@ -467,7 +477,6 @@ function addNewJobs(
     });
   }
 }
-
 
 /**
  * ================================================
@@ -655,7 +664,6 @@ async function processKeyword(
     );
 
     return keywordSummary;
-
   } catch (error) {
     report.failedKeywords++;
 
@@ -716,7 +724,6 @@ async function processKeyword(
   }
 }
 
-
 /**
  * ================================================
  * FINALIZE REPORT
@@ -764,7 +771,6 @@ function finalizeReport(
 
   return report;
 }
-
 
 /**
  * ================================================
@@ -842,7 +848,6 @@ function createDailyCsv(
     console.log(
       `CSV size: ${csvResult.sizeBytes} bytes`
     );
-
   } catch (error) {
     report.csvAttachment =
       null;
@@ -866,7 +871,6 @@ function createDailyCsv(
 
   return report;
 }
-
 
 /**
  * ================================================
@@ -1005,7 +1009,6 @@ async function sendEmailReport(
     console.log(
       `Message ID: ${result.messageId || "N/A"}`
     );
-
   } catch (error) {
     report.email.sent =
       false;
@@ -1024,7 +1027,6 @@ async function sendEmailReport(
 
   return report;
 }
-
 
 /**
  * ================================================
@@ -1136,7 +1138,6 @@ function printFinalReport(
   );
 }
 
-
 /**
  * ================================================
  * MAIN
@@ -1183,11 +1184,19 @@ async function main() {
 
     console.log(
       `Keyword limit: ${
-        MAX_KEYWORDS === 0
-          ? "ALL"
-          : MAX_KEYWORDS
+        CUSTOM_KEYWORD
+          ? "CUSTOM"
+          : MAX_KEYWORDS === 0
+            ? "ALL"
+            : MAX_KEYWORDS
       }`
     );
+
+    if (CUSTOM_KEYWORD) {
+      console.log(
+        `Custom keyword: ${CUSTOM_KEYWORD}`
+      );
+    }
 
     console.log(
       `Jobs per keyword/source: ${MAX_JOBS_PER_KEYWORD}`
@@ -1273,7 +1282,6 @@ async function main() {
     );
 
     return report;
-
   } catch (error) {
     console.error("\n");
 
@@ -1301,7 +1309,6 @@ async function main() {
   }
 }
 
-
 /**
  * ================================================
  * RUN
@@ -1311,7 +1318,6 @@ async function main() {
 if (require.main === module) {
   main();
 }
-
 
 /**
  * ================================================
