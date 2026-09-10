@@ -1,0 +1,20 @@
+name: HireIntel Scheduler Test
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "*/5 * * * *"
+
+jobs:
+  scheduler-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Confirm scheduled execution
+        run: |
+          echo "GitHub scheduler is working."
+          echo "UTC time: $(date -u)"
+          echo "IST time: $(TZ=Asia/Kolkata date)"
+          echo "Event: ${{ github.event_name }}"
+          echo "Run ID: ${{ github.run_id }}"
