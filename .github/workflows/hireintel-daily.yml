@@ -1,22 +1,19 @@
 name: HireIntel Daily Job Sourcing
 
 on:
-
   workflow_dispatch:
-
     inputs:
-
       keyword:
-        description: "Optional custom keyword for demo/testing"
+        description: "Optional custom keyword for demo/testing. Leave blank to process all configured keywords."
         required: false
         type: string
         default: ""
 
       max_jobs_per_source:
-        description: "Maximum jobs per source"
+        description: "Maximum jobs per source per keyword"
         required: false
         type: string
-        default: "1"
+        default: "10"
 
       send_email:
         description: "Send Gmail report"
@@ -31,65 +28,47 @@ on:
         default: true
 
 jobs:
-
   hireintel:
-
     name: Run HireIntel
-
     runs-on: ubuntu-latest
 
     env:
-
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-
       APIFY_MONTHLY_LIMIT_USD: ${{ secrets.APIFY_MONTHLY_LIMIT_USD }}
 
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-
       GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
 
       GMAIL_FROM: ${{ secrets.GMAIL_FROM }}
-
       GMAIL_TO: ${{ secrets.GMAIL_TO }}
 
       HIREINTEL_CUSTOM_KEYWORD: ${{ inputs.keyword }}
 
-      HIREINTEL_MAX_KEYWORDS: "1"
+      # 0 = process all configured keywords
+      HIREINTEL_MAX_KEYWORDS: "0"
 
       HIREINTEL_MAX_JOBS_PER_KEYWORD: ${{ inputs.max_jobs_per_source }}
 
       HIREINTEL_DRY_RUN: "false"
-
       HIREINTEL_SAVE_TO_DATABASE: ${{ inputs.save_to_database }}
-
       HIREINTEL_SEND_EMAIL_REPORT: ${{ inputs.send_email }}
 
     steps:
-
       - name: Checkout HireIntel
-
         uses: actions/checkout@v5
 
       - name: Set up Node.js
-
         uses: actions/setup-node@v5
-
         with:
-
           node-version: 24
-
           cache: npm
 
       - name: Install dependencies
-
         run: npm ci
 
       - name: Run HireIntel
-
         run: node src/index.js
