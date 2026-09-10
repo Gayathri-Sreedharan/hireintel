@@ -1,4 +1,4 @@
-const { runActorAndGetItems } = require("../apify/client");
+const { executeActor } = require("../apify/runActor");
 
 const {
   processSkills
@@ -13,51 +13,55 @@ const {
   saveJobs
 } = require("../database/saveJobs");
 
-
 /**
  * HireIntel - Naukri Scraper Adapter
  *
  * Complete Flow:
  *
  * Naukri Apify Actor
- *        ↓
+ *         ↓
+ * Persistent monthly budget protection
+ *         ↓
  * Raw Naukri Jobs
- *        ↓
+ *         ↓
  * Invalid Record Validation
- *        ↓
+ *         ↓
  * HireIntel Normalization
- *        ↓
+ *         ↓
  * Skill Extraction
- *        ↓
+ *         ↓
  * Domain Detection
- *        ↓
+ *         ↓
  * Unique Key Generation
- *        ↓
+ *         ↓
  * Supabase Duplicate Check
- *        ↓
+ *         ↓
  * Save New Jobs
  */
 
-
+/**
+ * Naukri Actor ID.
+ *
+ * The actual Actor used by the production execution
+ * is resolved through src/apify/actors.js.
+ *
+ * This environment value is retained here for the
+ * returned actorId field and direct visibility.
+ */
 const ACTOR_ID =
   process.env.APIFY_NAUKRI_ACTOR_ID ||
   "themineworks/naukri-jobs";
-
 
 /**
  * Check whether a value is a valid
  * non-empty string.
  */
-
 function hasValidText(value) {
-
   return (
     typeof value === "string" &&
     value.trim().length > 0
   );
-
 }
-
 
 /**
  * Convert Naukri posted_days_ago
@@ -69,104 +73,68 @@ function hasValidText(value) {
  * ↓
  * Current Date - 14 Days
  */
-
 function getPostedDate(item) {
-
   if (
     item.posted_days_ago === null ||
     item.posted_days_ago === undefined
   ) {
-
     return null;
-
   }
-
 
   const daysAgo =
     Number(item.posted_days_ago);
 
-
   if (
     Number.isNaN(daysAgo)
   ) {
-
     return null;
-
   }
-
 
   const date =
     new Date();
-
 
   date.setDate(
     date.getDate() - daysAgo
   );
 
-
   return date.toISOString();
-
 }
-
 
 /**
  * Convert Naukri salary information
  * into HireIntel salary fields.
  */
-
 function parseNaukriSalary(item) {
-
   const salaryText =
     item.salary_text;
 
-
   if (!salaryText) {
-
     return {
-
       salary_min: null,
-
       salary_max: null,
-
       salary_currency: "INR"
-
     };
-
   }
-
 
   const text =
     String(salaryText)
       .toLowerCase()
       .trim();
 
-
   /**
    * Salary not disclosed.
    */
-
   if (
-
     text.includes("not disclosed") ||
-
     text.includes("not mentioned") ||
-
     text.includes("not available")
-
   ) {
-
     return {
-
       salary_min: null,
-
       salary_max: null,
-
       salary_currency: "INR"
-
     };
-
   }
-
 
   /**
    * Salary range examples:
@@ -175,31 +143,20 @@ function parseNaukriSalary(item) {
    * 8 - 12 Lakhs
    * 8 to 12 Lacs
    */
-
   const rangeMatch =
     text.match(
-
       /(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*(?:lacs?|lakhs?)/i
-
     );
 
-
   if (rangeMatch) {
-
     return {
-
       salary_min:
         Number(rangeMatch[1]) * 100000,
-
       salary_max:
         Number(rangeMatch[2]) * 100000,
-
       salary_currency: "INR"
-
     };
-
   }
-
 
   /**
    * Single salary examples:
@@ -207,121 +164,72 @@ function parseNaukriSalary(item) {
    * 10 Lacs
    * 15 Lakhs
    */
-
   const singleMatch =
     text.match(
-
       /(\d+(?:\.\d+)?)\s*(?:lacs?|lakhs?)/i
-
     );
 
-
   if (singleMatch) {
-
     const salary =
       Number(singleMatch[1]) * 100000;
 
-
     return {
-
       salary_min:
         salary,
-
       salary_max:
         salary,
-
       salary_currency:
         "INR"
-
     };
-
   }
 
-
   return {
-
     salary_min: null,
-
     salary_max: null,
-
     salary_currency: "INR"
-
   };
-
 }
-
 
 /**
  * Detect work mode from
  * Naukri output and JD.
  */
-
 function detectWorkMode(item) {
-
   const text = [
-
     item.work_mode,
-
     item.description,
-
     item.location
-
   ]
-
     .filter(Boolean)
-
     .join(" ")
-
     .toLowerCase();
 
-
   if (
-
     text.includes("work from home") ||
-
     text.includes("remote")
-
   ) {
-
     return "remote";
-
   }
 
-
   if (
-
     text.includes("hybrid") ||
-
     text.includes(
       "work from office and home"
     )
-
   ) {
-
     return "hybrid";
-
   }
-
 
   if (
-
     text.includes("work from office") ||
-
     text.includes("on-site") ||
-
     text.includes("onsite")
-
   ) {
-
     return "onsite";
-
   }
 
-
   return null;
-
 }
-
 
 /**
  * Validate a raw Naukri record
@@ -336,389 +244,272 @@ function detectWorkMode(item) {
  * OR
  * - Source Job ID
  */
-
 function validateRawNaukriJob(item) {
-
   if (
     !item ||
     typeof item !== "object"
   ) {
-
     return {
-
       valid: false,
-
       reason:
         "Invalid job record"
-
     };
-
   }
-
 
   if (
     !hasValidText(item.title)
   ) {
-
     return {
-
       valid: false,
-
       reason:
         "Missing job title"
-
     };
-
   }
-
 
   if (
     !hasValidText(item.company)
   ) {
-
     return {
-
       valid: false,
-
       reason:
         "Missing company name"
-
     };
-
   }
-
 
   const hasJobUrl =
     hasValidText(item.apply_url) ||
     hasValidText(item.source_url);
-
 
   const hasJobId =
     item.job_id !== null &&
     item.job_id !== undefined &&
     String(item.job_id).trim().length > 0;
 
-
   if (
     !hasJobUrl &&
     !hasJobId
   ) {
-
     return {
-
       valid: false,
-
       reason:
         "Missing job URL and source job ID"
-
     };
-
   }
 
-
   return {
-
     valid: true,
-
     reason: null
-
   };
-
 }
-
 
 /**
  * Convert one Naukri job into
  * HireIntel standard format.
  */
-
 function mapNaukriJob(item) {
-
   const validation =
     validateRawNaukriJob(item);
-
 
   if (
     !validation.valid
   ) {
-
     return null;
-
   }
-
 
   const salary =
     parseNaukriSalary(item);
 
-
   /**
    * Create raw HireIntel job.
    */
-
   const rawJob = {
-
     title:
       item.title.trim(),
-
 
     company:
       item.company.trim(),
 
-
     location:
-
       hasValidText(item.location)
-
         ? item.location.trim()
-
         : null,
-
 
     source:
       "naukri",
 
-
     job_url:
-
       hasValidText(item.apply_url)
-
         ? item.apply_url.trim()
-
         : hasValidText(item.source_url)
-
           ? item.source_url.trim()
-
           : null,
 
-
     source_job_id:
-
       item.job_id !== undefined &&
-
       item.job_id !== null
-
         ? String(item.job_id).trim()
-
         : null,
-
 
     posted_date:
       getPostedDate(item),
 
-
     scraped_at:
-
       item.scraped_at ||
-
       new Date().toISOString(),
 
-
     description:
-
       hasValidText(item.description)
-
         ? item.description
-
         : null,
 
-
     experience_min:
-
       item.experience_min_years !== undefined &&
-
       item.experience_min_years !== null &&
-
       !Number.isNaN(
         Number(item.experience_min_years)
       )
-
         ? Number(
             item.experience_min_years
           )
-
         : null,
 
-
     experience_max:
-
       item.experience_max_years !== undefined &&
-
       item.experience_max_years !== null &&
-
       !Number.isNaN(
         Number(item.experience_max_years)
       )
-
         ? Number(
             item.experience_max_years
           )
-
         : null,
-
 
     salary_min:
       salary.salary_min,
 
-
     salary_max:
       salary.salary_max,
-
 
     salary_currency:
       salary.salary_currency,
 
-
     employment_type:
-
       item.job_type ||
-
       item.employment_type ||
-
       null,
-
 
     work_mode:
       detectWorkMode(item),
 
-
     key_skills:
-
       Array.isArray(item.skills)
-
         ? item.skills
-
             .filter(
               skill =>
                 typeof skill === "string" &&
                 skill.trim().length > 0
             )
-
             .map(
               skill =>
                 skill.trim()
             )
-
         : [],
-
 
     extracted_skills:
       [],
 
-
     domain:
       null,
-
 
     recruiter_name:
       null,
 
-
     recruiter_email:
       null,
-
 
     recruiter_phone:
       null,
 
-
     recruiter_linkedin_url:
       null,
-
 
     company_enriched:
       false,
 
-
     hiring_partner_enriched:
       false,
 
-
     processed:
       false
-
   };
-
 
   /**
    * Normalize the job.
    */
-
   const normalizedJob =
     normalizeJob(rawJob);
-
 
   /**
    * Extract skills and domain.
    */
-
   const processedJob =
     processSkills(normalizedJob);
-
 
   /**
    * Final validation after
    * normalization.
    */
-
   if (
     !processedJob ||
     !hasValidText(processedJob.title)
   ) {
-
     return null;
-
   }
-
 
   /**
    * Generate unique key.
    */
-
   processedJob.unique_key =
     generateUniqueKey(processedJob);
 
-
   return processedJob;
-
 }
-
 
 /**
  * Scrape Naukri.
  *
- * Optionally saves processed jobs
- * directly to Supabase.
+ * Uses executeActor() so Naukri receives
+ * the same persistent monthly Apify budget
+ * protection as LinkedIn.
+ *
+ * Budget flow:
+ *
+ * Reserve estimated cost
+ *       ↓
+ * Run Naukri Actor
+ *       ↓
+ * Record successful run
+ *
+ * If Actor fails:
+ *
+ * Refund reserved amount
  */
-
 async function scrape({
-
   keyword,
-
   maxJobs = 10,
-
   includeJobDescription = true,
-
   monitorMode = false,
-
   timeoutSecs = 300,
-
   maxTotalChargeUsd = 0.50,
-
   saveToDatabase = true
-
 } = {}) {
-
-
   if (
     !hasValidText(keyword)
   ) {
-
     throw new Error(
       "Naukri scrape requires a keyword"
     );
-
   }
-
 
   console.log(
     "\n================================"
@@ -731,7 +522,6 @@ async function scrape({
   console.log(
     "================================"
   );
-
 
   console.log(
     `Keyword: ${keyword}`
@@ -749,74 +539,71 @@ async function scrape({
     `Save to database: ${saveToDatabase}`
   );
 
+  /**
+   * Naukri uses the same persistent
+   * budget protection as all production
+   * Apify sources.
+   *
+   * The estimated reservation is based
+   * on the configured maximum Actor
+   * charge ceiling.
+   */
+  const estimatedCostUsd =
+    Number(maxTotalChargeUsd || 0.50);
+
+  if (
+    !Number.isFinite(estimatedCostUsd) ||
+    estimatedCostUsd < 0
+  ) {
+    throw new Error(
+      "maxTotalChargeUsd must be a valid non-negative number"
+    );
+  }
 
   /**
-   * Run Apify actor.
+   * Run Apify actor through the
+   * persistent budget-protected wrapper.
    */
-
   const result =
-    await runActorAndGetItems({
-
-      actorId:
-        ACTOR_ID,
-
+    await executeActor({
+      source: "naukri",
 
       input: {
-
         searchKeywords:
           [keyword.trim()],
-
         maxJobs,
-
         includeJobDescription,
-
         monitorMode
-
       },
 
+      estimatedCostUsd,
 
       timeoutSecs,
 
-
-      /**
-       * Safety ceiling.
-       */
-
       maxTotalChargeUsd
-
     });
-
 
   const rawJobs =
     Array.isArray(result.items)
-
       ? result.items
-
       : [];
-
 
   console.log(
     `\nRaw jobs returned: ${rawJobs.length}`
   );
 
-
   const jobs = [];
-
 
   const skippedJobs = [];
 
-
   const processingFailures = [];
-
 
   /**
    * Process every returned job.
    */
-
   for (
     const item of rawJobs
   ) {
-
     /**
      * Validate raw record first.
      *
@@ -824,152 +611,101 @@ async function scrape({
      * skipped before mapping and
      * never sent to Supabase.
      */
-
     const validation =
       validateRawNaukriJob(item);
-
 
     if (
       !validation.valid
     ) {
-
       skippedJobs.push({
-
         company:
           item?.company || null,
-
         title:
           item?.title || null,
-
         reason:
           validation.reason
-
       });
-
 
       console.log(
         `Skipping invalid job: ${validation.reason}`
       );
 
-
       continue;
-
     }
 
-
     try {
-
       const job =
         mapNaukriJob(item);
-
 
       /**
        * Final validation.
        */
-
       if (
-
         !job ||
-
         !hasValidText(job.title)
-
       ) {
-
         skippedJobs.push({
-
           company:
             item?.company || null,
-
           title:
             item?.title || null,
-
           reason:
             "Job mapping returned invalid result"
-
         });
-
 
         console.log(
           "Skipping invalid job: Job mapping returned invalid result"
         );
 
-
         continue;
-
       }
 
-
       jobs.push(job);
-
     }
-
     catch (error) {
-
       console.error(
-
         `Failed to process job: ${error.message}`
-
       );
 
-
       processingFailures.push({
-
         company:
           item?.company || null,
-
         title:
           item?.title || null,
-
         reason:
           error.message
-
       });
-
     }
-
   }
-
 
   console.log(
     `Skipped invalid jobs: ${skippedJobs.length}`
   );
 
-
   console.log(
     `Processing failures: ${processingFailures.length}`
   );
-
 
   console.log(
     `Processed valid jobs: ${jobs.length}`
   );
 
-
   /**
    * Save jobs to Supabase.
    */
-
   let saveResult = null;
 
-
   if (
-
     saveToDatabase &&
-
     jobs.length > 0
-
   ) {
-
     console.log(
       "\nSaving jobs to Supabase..."
     );
 
-
     try {
-
       saveResult =
         await saveJobs(jobs);
-
 
       console.log(
         "\nSupabase Save Result"
@@ -978,7 +714,6 @@ async function scrape({
       console.log(
         "----------------------"
       );
-
 
       console.log(
         `Created: ${saveResult.created.length}`
@@ -992,24 +727,19 @@ async function scrape({
         `Failed: ${saveResult.failed.length}`
       );
 
-
       /**
        * Show detailed failure reasons.
        */
-
       if (
         saveResult.failed.length > 0
       ) {
-
         console.log(
           "\nFailed Jobs:"
         );
 
-
         for (
           const failedJob of saveResult.failed
         ) {
-
           console.log(
             `\n✗ ${
               failedJob.company ||
@@ -1020,36 +750,28 @@ async function scrape({
             }`
           );
 
-
           console.log(
             `  Reason: ${
               failedJob.reason ||
               "Unknown error"
             }`
           );
-
         }
-
       }
-
 
       /**
        * Show duplicate jobs.
        */
-
       if (
         saveResult.duplicates.length > 0
       ) {
-
         console.log(
           "\nDuplicate Jobs:"
         );
 
-
         for (
           const duplicateJob of saveResult.duplicates
         ) {
-
           console.log(
             `✓ ${
               duplicateJob.company ||
@@ -1059,15 +781,10 @@ async function scrape({
               "Unknown Title"
             }`
           );
-
         }
-
       }
-
     }
-
     catch (error) {
-
       console.error(
         "\nDatabase save failed:"
       );
@@ -1076,116 +793,86 @@ async function scrape({
         error.message
       );
 
-
       saveResult = {
-
         created: [],
-
         duplicates: [],
-
         failed: jobs.map(
           job => ({
-
             company:
               job.company,
-
             title:
               job.title,
-
             reason:
               error.message
-
           })
         ),
-
         summary: {
-
           total:
             jobs.length,
-
           created:
             0,
-
           duplicates:
             0,
-
           failed:
             jobs.length
-
         }
-
       };
-
     }
-
   }
-
 
   /**
    * Return complete pipeline result.
    */
-
   return {
-
     source:
       "naukri",
 
-
     actorId:
+      result.actorId ||
       ACTOR_ID,
 
-
     runId:
-
-      result.run?.id ||
+      result.runId ||
       null,
-
 
     status:
-
-      result.run?.status ||
+      result.status ||
       null,
-
 
     rawCount:
       rawJobs.length,
 
-
     count:
       jobs.length,
 
-
     jobs,
-
 
     skippedJobs,
 
-
     processingFailures,
 
+    saveResult,
 
-    saveResult
-
+    budget:
+      result.budget ||
+      null
   };
-
 }
-
 
 /**
  * Direct test.
  *
- * Run:
+ * WARNING:
  *
- * node src/scrapers/naukri.js
+ * Running this file directly performs
+ * a live Apify run and consumes budget.
+ *
+ * Run only when explicitly intended.
  */
-
 async function main() {
-
   try {
-
     const result =
       await scrape({
-
         keyword:
           "data scientist",
 
@@ -1206,9 +893,7 @@ async function main() {
 
         saveToDatabase:
           true
-
       });
-
 
     console.log(
       "\n================================"
@@ -1221,7 +906,6 @@ async function main() {
     console.log(
       "================================"
     );
-
 
     console.log(
       `Run ID: ${result.runId}`
@@ -1247,15 +931,41 @@ async function main() {
       `Processed valid jobs: ${result.count}`
     );
 
+    /**
+     * Show budget information.
+     */
+    if (result.budget) {
+      console.log(
+        "\nAPIFY BUDGET"
+      );
+
+      console.log(
+        "------------"
+      );
+
+      console.log(
+        `Monthly limit: $${result.budget.monthlyLimitUsd.toFixed(4)}`
+      );
+
+      console.log(
+        `Monthly spent: $${result.budget.spentUsd.toFixed(4)}`
+      );
+
+      console.log(
+        `Runs: ${result.budget.runs}`
+      );
+
+      console.log(
+        `Jobs: ${result.budget.jobs}`
+      );
+    }
 
     /**
      * Show skipped job details.
      */
-
     if (
       result.skippedJobs.length > 0
     ) {
-
       console.log(
         "\nSKIPPED INVALID JOBS"
       );
@@ -1264,11 +974,9 @@ async function main() {
         "--------------------"
       );
 
-
       for (
         const skippedJob of result.skippedJobs
       ) {
-
         console.log(
           `✗ ${
             skippedJob.company ||
@@ -1279,24 +987,18 @@ async function main() {
           }`
         );
 
-
         console.log(
           `  Reason: ${skippedJob.reason}`
         );
-
       }
-
     }
-
 
     /**
      * Database summary.
      */
-
     if (
       result.saveResult
     ) {
-
       console.log(
         "\nDATABASE SUMMARY"
       );
@@ -1304,7 +1006,6 @@ async function main() {
       console.log(
         "----------------"
       );
-
 
       console.log(
         `Created: ${result.saveResult.summary.created}`
@@ -1317,9 +1018,7 @@ async function main() {
       console.log(
         `Failed: ${result.saveResult.summary.failed}`
       );
-
     }
-
 
     console.log(
       "\n================================"
@@ -1332,11 +1031,8 @@ async function main() {
     console.log(
       "================================"
     );
-
   }
-
   catch (error) {
-
     console.error(
       "\n================================"
     );
@@ -1349,45 +1045,29 @@ async function main() {
       "================================"
     );
 
-
     console.error(
       error.message
     );
-
 
     console.error(
       error.stack
     );
 
-
     process.exitCode = 1;
-
   }
-
 }
-
 
 if (
   require.main === module
 ) {
-
   main();
-
 }
 
-
 module.exports = {
-
   scrape,
-
   mapNaukriJob,
-
   parseNaukriSalary,
-
   detectWorkMode,
-
   validateRawNaukriJob,
-
   hasValidText
-
 };
