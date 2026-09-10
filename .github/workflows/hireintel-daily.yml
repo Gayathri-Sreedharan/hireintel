@@ -2,8 +2,9 @@ name: HireIntel Daily Job Sourcing
 
 on:
   workflow_dispatch:
+
   schedule:
-    - cron: "35 4 * * *"
+    - cron: "50 5 * * *"
 
 jobs:
   hireintel:
@@ -24,9 +25,9 @@ jobs:
 
       HIREINTEL_MAX_KEYWORDS: "1"
       HIREINTEL_MAX_JOBS_PER_KEYWORD: "1"
-      HIREINTEL_DRY_RUN: "false"
-      HIREINTEL_SAVE_TO_DATABASE: "true"
-      HIREINTEL_SEND_EMAIL_REPORT: "true"
+      HIREINTEL_DRY_RUN: "true"
+      HIREINTEL_SAVE_TO_DATABASE: "false"
+      HIREINTEL_SEND_EMAIL_REPORT: "false"
 
     steps:
       - name: Checkout HireIntel
