@@ -63,12 +63,21 @@ async function reserveBudget(source, amountUsd) {
   }
 
   if (!data?.allowed) {
-    throw new Error(
+    const limitError = new Error(
       `Monthly Apify budget limit reached for ${source}. ` +
       `Spent: $${Number(data?.spent_usd || 0).toFixed(4)}, ` +
       `Remaining: $${Number(data?.remaining_usd || 0).toFixed(4)}, ` +
       `Limit: $${monthlyLimitUsd.toFixed(2)}`
     );
+
+    // Lets callers (for example the email alert) recognise this case.
+    limitError.code = "APIFY_BUDGET_LIMIT";
+    limitError.source = source;
+    limitError.spentUsd = Number(data?.spent_usd || 0);
+    limitError.remainingUsd = Number(data?.remaining_usd || 0);
+    limitError.monthlyLimitUsd = monthlyLimitUsd;
+
+    throw limitError;
   }
 
   return {

@@ -606,7 +606,54 @@ async function sendReport(report = {}) {
   };
 }
 
+/**
+ * Send a short plain alert email (for example "Apify budget used up").
+ * Goes to the same To / CC / BCC recipients as the daily report.
+ */
+async function sendAlert({ subject, text }) {
+  const config = getEmailConfig();
+
+  const validation = validateEmailConfig(config);
+
+  if (!validation.valid) {
+    throw new Error(
+      `Gmail email configuration missing: ${validation.missing.join(
+        ", "
+      )}`
+    );
+  }
+
+  const gmail = createGmailClient(config);
+
+  const html = `<!DOCTYPE html><html><body style="font-family: Arial, sans-serif; line-height: 1.5;">${escapeHtml(
+    text
+  ).replace(/\n/g, "<br>")}</body></html>`;
+
+  const raw = createRawEmail({
+    from: config.from,
+    to: config.to,
+    cc: config.cc,
+    bcc: config.bcc,
+    subject,
+    text,
+    html
+  });
+
+  const response = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw
+    }
+  });
+
+  return {
+    success: true,
+    messageId: response.data.id || null
+  };
+}
+
 module.exports = {
+  sendAlert,
   getEmailConfig,
   validateEmailConfig,
   createGmailClient,

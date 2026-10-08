@@ -2,6 +2,12 @@ const {
   getActor,
   getActorToken
 } = require("./actors");
+
+const {
+  notifyBudgetLimitReached,
+  notifyApifyAccountLimit,
+  isApifyAccountLimitError
+} = require("./budgetAlert");
 const { runActorAndGetItems } = require("./client");
 
 const {
@@ -83,10 +89,20 @@ async function executeActor({
   // any budget, so a missing token fails fast and costs nothing.
   const apifyToken = getActorToken(source);
 
-  const reservation = await reserveBudget(
-    source,
-    estimatedCost
-  );
+  let reservation;
+
+  try {
+    reservation = await reserveBudget(
+      source,
+      estimatedCost
+    );
+  } catch (budgetError) {
+    if (budgetError.code === "APIFY_BUDGET_LIMIT") {
+      await notifyBudgetLimitReached(budgetError);
+    }
+
+    throw budgetError;
+  }
 
   const monthlyLimitUsd = reservation.monthlyLimitUsd;
 
@@ -185,6 +201,13 @@ async function executeActor({
         `WARNING: Could not refund Apify budget: ${
           refundError.message
         }`
+      );
+    }
+
+    if (isApifyAccountLimitError(error)) {
+      await notifyApifyAccountLimit(
+        source,
+        error.message
       );
     }
 
