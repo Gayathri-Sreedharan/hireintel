@@ -548,8 +548,9 @@ async function scrape({
    * on the configured maximum Actor
    * charge ceiling.
    */
-  const estimatedCostUsd =
-    Number(maxTotalChargeUsd || 0.50);
+    // Reserve a realistic cost per call. The real Apify charge cap
+  // (maxTotalChargeUsd) is still sent to Apify unchanged.
+  const estimatedCostUsd = 0.05;
 
   if (
     !Number.isFinite(estimatedCostUsd) ||
