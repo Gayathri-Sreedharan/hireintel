@@ -6,8 +6,40 @@ function getEmailConfig() {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
     refreshToken: process.env.GOOGLE_REFRESH_TOKEN || "",
     from: process.env.GMAIL_FROM || "",
-    to: process.env.GMAIL_TO || ""
+    to: process.env.GMAIL_TO || "",
+
+    // Optional. Several addresses can be separated by commas.
+    cc: process.env.GMAIL_CC || "",
+    bcc: process.env.GMAIL_BCC || ""
   };
+}
+
+/**
+ * Clean a list of recipients such as
+ *   "a@x.com, b@y.com; c@z.com"
+ * into "a@x.com, b@y.com, c@z.com".
+ * Invalid entries are skipped with a warning.
+ */
+function normalizeRecipients(value, label = "recipient") {
+  const emailPattern = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
+
+  const valid = [];
+
+  String(value ?? "")
+    .split(/[,;]/)
+    .map((item) => item.replace(/[\r\n]/g, " ").trim())
+    .filter(Boolean)
+    .forEach((item) => {
+      if (emailPattern.test(item)) {
+        valid.push(item);
+      } else {
+        console.warn(
+          `WARNING: Ignoring invalid ${label} address: ${item}`
+        );
+      }
+    });
+
+  return valid.join(", ");
 }
 
 function validateEmailConfig(config = getEmailConfig()) {
@@ -409,6 +441,8 @@ function sanitizeHeader(value) {
 function createRawEmail({
   from,
   to,
+  cc = "",
+  bcc = "",
   subject,
   text,
   html,
@@ -427,12 +461,26 @@ function createRawEmail({
   const safeTo = sanitizeHeader(to);
   const safeSubject = sanitizeHeader(subject);
 
+  const safeCc = normalizeRecipients(cc, "CC");
+  const safeBcc = normalizeRecipients(bcc, "BCC");
+
   const parts = [
     `From: ${safeFrom}`,
-    `To: ${safeTo}`,
-    `Subject: ${safeSubject}`,
-    "MIME-Version: 1.0"
+    `To: ${safeTo}`
   ];
+
+  if (safeCc) {
+    parts.push(`Cc: ${safeCc}`);
+  }
+
+  // Gmail removes the Bcc header before delivery, so BCC
+  // recipients receive the mail but are not visible to others.
+  if (safeBcc) {
+    parts.push(`Bcc: ${safeBcc}`);
+  }
+
+  parts.push(`Subject: ${safeSubject}`);
+  parts.push("MIME-Version: 1.0");
 
   if (hasAttachment) {
     parts.push(
@@ -534,6 +582,8 @@ async function sendReport(report = {}) {
   const raw = createRawEmail({
     from: config.from,
     to: config.to,
+    cc: config.cc,
+    bcc: config.bcc,
     subject,
     text,
     html,
