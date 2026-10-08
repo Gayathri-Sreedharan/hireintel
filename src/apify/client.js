@@ -3,32 +3,59 @@ const dotenv = require("dotenv");
 
 dotenv.config();
 
-const APIFY_TOKEN = process.env.APIFY_TOKEN;
-
-if (!APIFY_TOKEN) {
-  throw new Error("Missing APIFY_TOKEN in .env");
-}
-
 const APIFY_BASE_URL = "https://api.apify.com/v2";
 
-const apifyClient = axios.create({
-  baseURL: APIFY_BASE_URL,
-  timeout: 180000,
-  headers: {
-    Authorization: `Bearer ${APIFY_TOKEN}`,
-    "Content-Type": "application/json"
+/**
+ * One axios client per Apify token.
+ *
+ * Naukri and LinkedIn use different Apify accounts,
+ * so every call must say which token to use.
+ */
+const clientCache = new Map();
+
+function getApifyClient(apifyToken) {
+  if (!apifyToken) {
+    throw new Error("Apify token is required");
   }
-});
+
+  if (!clientCache.has(apifyToken)) {
+    clientCache.set(
+      apifyToken,
+      axios.create({
+        baseURL: APIFY_BASE_URL,
+        timeout: 180000,
+        headers: {
+          Authorization: `Bearer ${apifyToken}`,
+          "Content-Type": "application/json"
+        }
+      })
+    );
+  }
+
+  return clientCache.get(apifyToken);
+}
+
+/**
+ * Get the account that owns a token.
+ * Free call, useful for checking which account a token belongs to.
+ */
+async function getAccountInfo(apifyToken) {
+  const response = await getApifyClient(apifyToken).get(
+    "/users/me"
+  );
+
+  return response.data?.data || response.data;
+}
 
 /**
  * Get Actor metadata.
  */
-async function getActorInfo(actorId) {
+async function getActorInfo(actorId, apifyToken) {
   if (!actorId) {
     throw new Error("Actor ID is required");
   }
 
-  const response = await apifyClient.get(
+  const response = await getApifyClient(apifyToken).get(
     `/acts/${encodeURIComponent(actorId)}`
   );
 
@@ -43,6 +70,7 @@ async function getActorInfo(actorId) {
  */
 async function startActor({
   actorId,
+  apifyToken,
   input = {},
   timeoutSecs = 300,
   maxTotalChargeUsd = null
@@ -59,7 +87,7 @@ async function startActor({
     params.maxTotalChargeUsd = maxTotalChargeUsd;
   }
 
-  const response = await apifyClient.post(
+  const response = await getApifyClient(apifyToken).post(
     `/acts/${encodeURIComponent(actorId)}/runs`,
     input,
     {
@@ -73,12 +101,12 @@ async function startActor({
 /**
  * Get the current status/details of an Actor run.
  */
-async function getRun(runId) {
+async function getRun(runId, apifyToken) {
   if (!runId) {
     throw new Error("Run ID is required");
   }
 
-  const response = await apifyClient.get(
+  const response = await getApifyClient(apifyToken).get(
     `/actor-runs/${encodeURIComponent(runId)}`
   );
 
@@ -88,12 +116,16 @@ async function getRun(runId) {
 /**
  * Get dataset items.
  */
-async function getDatasetItems(datasetId, options = {}) {
+async function getDatasetItems(
+  datasetId,
+  apifyToken,
+  options = {}
+) {
   if (!datasetId) {
     throw new Error("Dataset ID is required");
   }
 
-  const response = await apifyClient.get(
+  const response = await getApifyClient(apifyToken).get(
     `/datasets/${encodeURIComponent(datasetId)}/items`,
     {
       params: {
@@ -119,6 +151,7 @@ async function getDatasetItems(datasetId, options = {}) {
  */
 async function runActorAndGetItems({
   actorId,
+  apifyToken,
   input = {},
   timeoutSecs = 300,
   maxTotalChargeUsd = null,
@@ -126,6 +159,7 @@ async function runActorAndGetItems({
 }) {
   const startResponse = await startActor({
     actorId,
+    apifyToken,
     input,
     timeoutSecs,
     maxTotalChargeUsd
@@ -174,7 +208,7 @@ async function runActorAndGetItems({
       setTimeout(resolve, pollIntervalMs)
     );
 
-    const runResponse = await getRun(runId);
+    const runResponse = await getRun(runId, apifyToken);
 
     currentRun = runResponse.data;
   }
@@ -191,7 +225,8 @@ async function runActorAndGetItems({
 
   if (currentRun.defaultDatasetId) {
     items = await getDatasetItems(
-      currentRun.defaultDatasetId
+      currentRun.defaultDatasetId,
+      apifyToken
     );
   }
 
@@ -202,7 +237,8 @@ async function runActorAndGetItems({
 }
 
 module.exports = {
-  apifyClient,
+  getApifyClient,
+  getAccountInfo,
   getActorInfo,
   startActor,
   runActor: startActor,

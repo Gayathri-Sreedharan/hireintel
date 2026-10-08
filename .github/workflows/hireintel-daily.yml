@@ -36,8 +36,12 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
-      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-      APIFY_MONTHLY_LIMIT_USD: ${{ secrets.APIFY_MONTHLY_LIMIT_USD }}
+      # One Apify account per source, each with its own budget.
+      # The limit secrets are optional; each defaults to $5/month.
+      APIFY_TOKEN_NAUKRI: ${{ secrets.APIFY_TOKEN_NAUKRI }}
+      APIFY_TOKEN_LINKEDIN: ${{ secrets.APIFY_TOKEN_LINKEDIN }}
+      APIFY_MONTHLY_LIMIT_NAUKRI_USD: ${{ secrets.APIFY_MONTHLY_LIMIT_NAUKRI_USD }}
+      APIFY_MONTHLY_LIMIT_LINKEDIN_USD: ${{ secrets.APIFY_MONTHLY_LIMIT_LINKEDIN_USD }}
 
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}

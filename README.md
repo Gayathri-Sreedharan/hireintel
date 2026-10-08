@@ -783,9 +783,28 @@ A controlled A/B test should be performed before production replacement.
 
 HireIntel maintains a persistent monthly budget through Supabase.
 
-The monthly limit is configured using:
+Naukri and LinkedIn run on separate Apify accounts, each with its own token and its own monthly budget.
 
-APIFY_MONTHLY_LIMIT_USD=5
+Tokens:
+
+APIFY_TOKEN_NAUKRI=
+APIFY_TOKEN_LINKEDIN=
+
+Monthly limits (optional, default 5 each):
+
+APIFY_MONTHLY_LIMIT_NAUKRI_USD=5
+APIFY_MONTHLY_LIMIT_LINKEDIN_USD=5
+
+Budget rows in Supabase are keyed per source and month, for example:
+
+2026-10:naukri
+2026-10:linkedin
+
+The legacy APIFY_TOKEN and APIFY_MONTHLY_LIMIT_USD are only used as a fallback (with a warning) when a source-specific value is missing.
+
+To confirm both sources use different accounts (free, runs no Actor):
+
+node test/apifyAccountsCheck.js
 
 The system uses a reservation model.
 
@@ -1076,8 +1095,10 @@ The production workflow currently supplies:
 
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
-APIFY_TOKEN
-APIFY_MONTHLY_LIMIT_USD
+APIFY_TOKEN_NAUKRI
+APIFY_TOKEN_LINKEDIN
+APIFY_MONTHLY_LIMIT_NAUKRI_USD
+APIFY_MONTHLY_LIMIT_LINKEDIN_USD
 
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
@@ -1100,8 +1121,10 @@ The following should be stored as GitHub Actions Secrets:
 
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
-APIFY_TOKEN
-APIFY_MONTHLY_LIMIT_USD
+APIFY_TOKEN_NAUKRI
+APIFY_TOKEN_LINKEDIN
+APIFY_MONTHLY_LIMIT_NAUKRI_USD
+APIFY_MONTHLY_LIMIT_LINKEDIN_USD
 
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
@@ -1124,8 +1147,10 @@ Local .env example:
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 
-APIFY_TOKEN=
-APIFY_MONTHLY_LIMIT_USD=5
+APIFY_TOKEN_NAUKRI=
+APIFY_TOKEN_LINKEDIN=
+APIFY_MONTHLY_LIMIT_NAUKRI_USD=5
+APIFY_MONTHLY_LIMIT_LINKEDIN_USD=5
 
 APIFY_NAUKRI_ACTOR_ID=
 APIFY_LINKEDIN_ACTOR_ID=
@@ -1188,8 +1213,10 @@ Example:
 SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-APIFY_TOKEN=your_apify_token
-APIFY_MONTHLY_LIMIT_USD=5
+APIFY_TOKEN_NAUKRI=your_naukri_account_apify_token
+APIFY_TOKEN_LINKEDIN=your_linkedin_account_apify_token
+APIFY_MONTHLY_LIMIT_NAUKRI_USD=5
+APIFY_MONTHLY_LIMIT_LINKEDIN_USD=5
 
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
@@ -1602,7 +1629,8 @@ Apify budget failure
 
 Check:
 
-APIFY_MONTHLY_LIMIT_USD
+APIFY_MONTHLY_LIMIT_NAUKRI_USD
+APIFY_MONTHLY_LIMIT_LINKEDIN_USD
 
 and the persistent budget status in Supabase.
 

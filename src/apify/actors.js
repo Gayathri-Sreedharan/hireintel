@@ -32,6 +32,11 @@ const ACTORS = {
 
     enabled: true,
 
+    // Each source runs on its own Apify account and has
+    // its own monthly budget.
+    tokenEnv: "APIFY_TOKEN_NAUKRI",
+    limitEnv: "APIFY_MONTHLY_LIMIT_NAUKRI_USD",
+
     supportsFullDetails: true,
     supportsRecruiterData: true,
 
@@ -60,6 +65,9 @@ const ACTORS = {
 
     enabled: true,
 
+    tokenEnv: "APIFY_TOKEN_LINKEDIN",
+    limitEnv: "APIFY_MONTHLY_LIMIT_LINKEDIN_USD",
+
     supportsFullDetails: true,
     supportsRecruiterData: true,
 
@@ -75,6 +83,76 @@ const ACTORS = {
     ]
   }
 };
+
+/**
+ * ============================================================
+ * Per-source Apify credentials and budget
+ * ============================================================
+ *
+ * Token lookup order:
+ *   1. The source's own variable (APIFY_TOKEN_NAUKRI /
+ *      APIFY_TOKEN_LINKEDIN)
+ *   2. Legacy APIFY_TOKEN (with a warning, so that both
+ *      sources are not silently run on one account)
+ *
+ * Monthly limit lookup order:
+ *   1. The source's own variable
+ *      (APIFY_MONTHLY_LIMIT_NAUKRI_USD /
+ *       APIFY_MONTHLY_LIMIT_LINKEDIN_USD)
+ *   2. Legacy APIFY_MONTHLY_LIMIT_USD
+ *   3. 5
+ */
+function getActorToken(sourceKey) {
+  const actor = ACTORS[sourceKey];
+
+  if (!actor) {
+    throw new Error(`Unknown Apify source: ${sourceKey}`);
+  }
+
+  const ownToken = process.env[actor.tokenEnv];
+
+  if (ownToken) {
+    return ownToken;
+  }
+
+  if (process.env.APIFY_TOKEN) {
+    console.warn(
+      `WARNING: ${actor.tokenEnv} is not set. ` +
+      `Falling back to legacy APIFY_TOKEN for "${sourceKey}". ` +
+      `Set ${actor.tokenEnv} to use a separate account.`
+    );
+
+    return process.env.APIFY_TOKEN;
+  }
+
+  throw new Error(
+    `Missing Apify token for "${sourceKey}". ` +
+    `Set ${actor.tokenEnv}.`
+  );
+}
+
+function getActorMonthlyLimit(sourceKey) {
+  const actor = ACTORS[sourceKey];
+
+  if (!actor) {
+    throw new Error(`Unknown Apify source: ${sourceKey}`);
+  }
+
+  const raw =
+    process.env[actor.limitEnv] ||
+    process.env.APIFY_MONTHLY_LIMIT_USD ||
+    5;
+
+  const limit = Number(raw);
+
+  if (!Number.isFinite(limit) || limit <= 0) {
+    throw new Error(
+      `Invalid monthly Apify limit for "${sourceKey}": ${raw}`
+    );
+  }
+
+  return limit;
+}
 
 /**
  * ============================================================
@@ -114,6 +192,8 @@ function getAllActors() {
 module.exports = {
   ACTORS,
   getActor,
+  getActorToken,
+  getActorMonthlyLimit,
   getEnabledActors,
   getAllActors
 };

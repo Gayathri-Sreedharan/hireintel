@@ -1,8 +1,5 @@
 const supabase = require("../config/supabase");
-
-const MONTHLY_LIMIT_USD = Number(
-  process.env.APIFY_MONTHLY_LIMIT_USD || 5
-);
+const { getActorMonthlyLimit } = require("./actors");
 
 function getCurrentMonth() {
   const now = new Date();
@@ -10,6 +7,26 @@ function getCurrentMonth() {
   return `${now.getUTCFullYear()}-${String(
     now.getUTCMonth() + 1
   ).padStart(2, "0")}`;
+}
+
+/**
+ * Each source has its own budget row.
+ *
+ * The existing Supabase functions and the apify_usage table
+ * are keyed by the "month" value, so a per-source key such as
+ *
+ *   2026-10:naukri
+ *   2026-10:linkedin
+ *
+ * gives every source a separate monthly budget without
+ * changing the database.
+ */
+function getBudgetKey(source, month = getCurrentMonth()) {
+  if (!source) {
+    throw new Error("Apify source is required for budget tracking");
+  }
+
+  return `${month}:${source}`;
 }
 
 
@@ -20,7 +37,7 @@ function getCurrentMonth() {
  * so separate GitHub Actions runs cannot independently
  * reset the budget.
  */
-async function reserveBudget(amountUsd) {
+async function reserveBudget(source, amountUsd) {
   const amount = Number(amountUsd || 0);
 
   if (amount < 0) {
@@ -28,37 +45,39 @@ async function reserveBudget(amountUsd) {
   }
 
   const month = getCurrentMonth();
+  const monthlyLimitUsd = getActorMonthlyLimit(source);
 
   const { data, error } = await supabase.rpc(
     "reserve_apify_budget",
     {
-      p_month: month,
+      p_month: getBudgetKey(source, month),
       p_amount: amount,
-      p_monthly_limit: MONTHLY_LIMIT_USD
+      p_monthly_limit: monthlyLimitUsd
     }
   );
 
   if (error) {
     throw new Error(
-      `Unable to reserve Apify budget: ${error.message}`
+      `Unable to reserve Apify budget (${source}): ${error.message}`
     );
   }
 
   if (!data?.allowed) {
     throw new Error(
-      `Monthly Apify budget limit reached. ` +
+      `Monthly Apify budget limit reached for ${source}. ` +
       `Spent: $${Number(data?.spent_usd || 0).toFixed(4)}, ` +
       `Remaining: $${Number(data?.remaining_usd || 0).toFixed(4)}, ` +
-      `Limit: $${MONTHLY_LIMIT_USD.toFixed(2)}`
+      `Limit: $${monthlyLimitUsd.toFixed(2)}`
     );
   }
 
   return {
+    source,
     month,
     reservedUsd: amount,
     spentUsd: Number(data.spent_usd || 0),
     remainingUsd: Number(data.remaining_usd || 0),
-    monthlyLimitUsd: MONTHLY_LIMIT_USD
+    monthlyLimitUsd
   };
 }
 
@@ -69,24 +88,25 @@ async function reserveBudget(amountUsd) {
  * The money was already reserved before the run.
  * This function only records run/job counts.
  */
-async function recordRun({ jobs = 0 } = {}) {
+async function recordRun(source, { jobs = 0 } = {}) {
   const month = getCurrentMonth();
 
   const { data, error } = await supabase.rpc(
     "record_apify_run",
     {
-      p_month: month,
+      p_month: getBudgetKey(source, month),
       p_jobs: Number(jobs || 0)
     }
   );
 
   if (error) {
     throw new Error(
-      `Unable to record Apify run: ${error.message}`
+      `Unable to record Apify run (${source}): ${error.message}`
     );
   }
 
   return {
+    source,
     month,
     spentUsd: Number(data?.spent_usd || 0),
     runs: Number(data?.runs || 0),
@@ -98,7 +118,7 @@ async function recordRun({ jobs = 0 } = {}) {
 /**
  * Refund a budget reservation if an Apify run fails.
  */
-async function refundBudget(amountUsd) {
+async function refundBudget(source, amountUsd) {
   const amount = Number(amountUsd || 0);
 
   if (amount <= 0) {
@@ -110,18 +130,19 @@ async function refundBudget(amountUsd) {
   const { data, error } = await supabase.rpc(
     "refund_apify_budget",
     {
-      p_month: month,
+      p_month: getBudgetKey(source, month),
       p_amount: amount
     }
   );
 
   if (error) {
     throw new Error(
-      `Unable to refund Apify budget: ${error.message}`
+      `Unable to refund Apify budget (${source}): ${error.message}`
     );
   }
 
   return {
+    source,
     month,
     spentUsd: Number(data?.spent_usd || 0)
   };
@@ -129,31 +150,33 @@ async function refundBudget(amountUsd) {
 
 
 /**
- * Get current persistent budget status.
+ * Get current persistent budget status for one source.
  */
-async function getBudgetStatus() {
+async function getBudgetStatus(source) {
   const month = getCurrentMonth();
+  const monthlyLimitUsd = getActorMonthlyLimit(source);
 
   const { data, error } = await supabase
     .from("apify_usage")
     .select("*")
-    .eq("month", month)
+    .eq("month", getBudgetKey(source, month))
     .maybeSingle();
 
   if (error) {
     throw new Error(
-      `Unable to read Apify budget: ${error.message}`
+      `Unable to read Apify budget (${source}): ${error.message}`
     );
   }
 
   const spent = Number(data?.spent_usd || 0);
 
   return {
+    source,
     month,
-    monthlyLimitUsd: MONTHLY_LIMIT_USD,
+    monthlyLimitUsd,
     spentUsd: Number(spent.toFixed(4)),
     remainingUsd: Number(
-      Math.max(0, MONTHLY_LIMIT_USD - spent).toFixed(4)
+      Math.max(0, monthlyLimitUsd - spent).toFixed(4)
     ),
     runs: Number(data?.runs || 0),
     jobs: Number(data?.jobs || 0)
@@ -162,11 +185,10 @@ async function getBudgetStatus() {
 
 
 module.exports = {
-  MONTHLY_LIMIT_USD,
   getCurrentMonth,
+  getBudgetKey,
   reserveBudget,
   recordRun,
   refundBudget,
   getBudgetStatus
 };
-
