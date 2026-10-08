@@ -265,7 +265,7 @@ async function scrape({
   const result = await executeActor({
     source: SOURCE,
     input: input,
-    estimatedCostUsd: 0.10,
+    estimatedCostUsd: 0.02,
     timeoutSecs: timeoutSecs,
     maxTotalChargeUsd: maxTotalChargeUsd
   });

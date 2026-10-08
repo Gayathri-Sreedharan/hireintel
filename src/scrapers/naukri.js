@@ -500,7 +500,7 @@ async function scrape({
   includeJobDescription = true,
   monitorMode = false,
   timeoutSecs = 300,
-  maxTotalChargeUsd = 0.50,
+  maxTotalChargeUsd = 0.05,
   saveToDatabase = true
 } = {}) {
   if (
