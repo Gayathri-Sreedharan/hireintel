@@ -1,4 +1,7 @@
-const { getActor } = require("./actors");
+const {
+  getActor,
+  getActorToken
+} = require("./actors");
 const { runActorAndGetItems } = require("./client");
 
 const {
@@ -76,8 +79,19 @@ async function executeActor({
     "\nChecking persistent Apify budget..."
   );
 
+  // Resolve this source's own Apify account before reserving
+  // any budget, so a missing token fails fast and costs nothing.
+  const apifyToken = getActorToken(source);
+
   const reservation = await reserveBudget(
+    source,
     estimatedCost
+  );
+
+  const monthlyLimitUsd = reservation.monthlyLimitUsd;
+
+  console.log(
+    `Apify source: ${source} (monthly limit $${monthlyLimitUsd.toFixed(2)})`
   );
 
   console.log(
@@ -107,6 +121,7 @@ async function executeActor({
 
     const result = await runActorAndGetItems({
       actorId: actor.actorId,
+      apifyToken,
       input,
       timeoutSecs,
       maxTotalChargeUsd: chargeLimit
@@ -114,7 +129,7 @@ async function executeActor({
 
     const items = result.items || [];
 
-    const usage = await recordRun({
+    const usage = await recordRun(source, {
       jobs: items.length
     });
 
@@ -129,8 +144,7 @@ async function executeActor({
     console.log(
       `Monthly remaining: $${Math.max(
         0,
-        Number(process.env.APIFY_MONTHLY_LIMIT_USD || 5) -
-        usage.spentUsd
+        monthlyLimitUsd - usage.spentUsd
       ).toFixed(4)}`
     );
 
@@ -143,10 +157,7 @@ async function executeActor({
       count: items.length,
       budget: {
         month: usage.month,
-        monthlyLimitUsd:
-          Number(
-            process.env.APIFY_MONTHLY_LIMIT_USD || 5
-          ),
+        monthlyLimitUsd,
         spentUsd:
           Number(
             usage.spentUsd.toFixed(4)
@@ -160,6 +171,7 @@ async function executeActor({
 
     try {
       await refundBudget(
+        source,
         estimatedCost
       );
 
