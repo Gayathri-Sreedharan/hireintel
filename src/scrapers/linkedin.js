@@ -6,6 +6,12 @@ const {
 } = require("../processors/normalizeJob");
 const { deduplicateJobs } = require("../processors/deduplicate");
 const { saveJobs } = require("../database/saveJobs");
+const {
+  getMaxPostedAgeDays,
+  toLinkedInDatePosted,
+  parsePostedDate,
+  checkFreshness
+} = require("../processors/freshness");
 
 const SOURCE = "linkedin";
 
@@ -62,6 +68,35 @@ function validateRawLinkedInJob(item) {
   return {
     valid: true
   };
+}
+
+/**
+ * Posted date from the LinkedIn actor.
+ * postedAt is an ISO date ("2026-10-05"); postedTimeAgo
+ * ("3 days ago") is used only when postedAt is missing.
+ */
+function getLinkedInPostedDate(item) {
+  const direct =
+    item.postedAt ||
+    item.posted_date ||
+    item.postedDate ||
+    null;
+
+  if (direct) {
+    return direct;
+  }
+
+  const relative =
+    item.postedTimeAgo ||
+    item.posted_time_ago ||
+    null;
+
+  if (relative) {
+    const date = parsePostedDate(relative);
+    return date ? date.toISOString() : null;
+  }
+
+  return null;
 }
 
 function mapLinkedInJob(item) {
@@ -137,10 +172,7 @@ function mapLinkedInJob(item) {
     source_job_id: sourceJobId,
 
     posted_date:
-      item.postedAt ||
-      item.posted_date ||
-      item.postedDate ||
-      null,
+      getLinkedInPostedDate(item),
 
     description: description,
 
@@ -244,6 +276,16 @@ async function scrape({
   console.log("================================");
   console.log("Keyword: " + keyword);
   console.log("Location: India");
+
+  // Only jobs posted within the last N days
+  // (HIREINTEL_MAX_POSTED_AGE_DAYS, default 7).
+  const maxAgeDays = getMaxPostedAgeDays();
+  const datePosted = toLinkedInDatePosted(maxAgeDays);
+
+  console.log(
+    "Posted within: " + maxAgeDays +
+    " days (LinkedIn filter: " + datePosted + ")"
+  );
   console.log("Max jobs: " + maxJobs);
   console.log(
     "Full JD: " +
@@ -259,7 +301,9 @@ async function scrape({
     location: "India",
     maxItems: maxJobs,
     scrapeDetails: includeJobDescription,
-    scrapeCompany: false
+    scrapeCompany: false,
+    datePosted: datePosted,
+    sortBy: "recent"
   };
 
   const result = await executeActor({
@@ -282,6 +326,7 @@ async function scrape({
 
   const jobs = [];
   const skippedJobs = [];
+  const staleJobs = [];
   const processingFailures = [];
 
   for (const item of rawJobs) {
@@ -298,6 +343,24 @@ async function scrape({
         "Skipping invalid job: " +
         validation.reason
       );
+
+      continue;
+    }
+
+    // Drop jobs older than the posting window,
+    // even if the actor returned them.
+    const freshness = checkFreshness(
+      getLinkedInPostedDate(item),
+      { maxAgeDays }
+    );
+
+    if (!freshness.keep) {
+      staleJobs.push({
+        company: item.company || item.companyName || null,
+        title: item.title || item.jobTitle || null,
+        postedAt: item.postedAt || item.postedTimeAgo || null,
+        reason: freshness.reason
+      });
 
       continue;
     }
@@ -352,6 +415,11 @@ async function scrape({
   );
 
   console.log(
+    "Skipped older than " + maxAgeDays + " days: " +
+    staleJobs.length
+  );
+
+  console.log(
     "Processing failures: " +
     processingFailures.length
   );
@@ -403,6 +471,7 @@ async function scrape({
     count: uniqueJobs.length,
     jobs: uniqueJobs,
     skippedJobs: skippedJobs,
+    staleJobs: staleJobs,
     processingFailures: processingFailures,
     saveResult: saveResult
   };
@@ -411,5 +480,6 @@ async function scrape({
 module.exports = {
   scrape,
   validateRawLinkedInJob,
-  mapLinkedInJob
+  mapLinkedInJob,
+  getLinkedInPostedDate
 };
