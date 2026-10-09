@@ -13,6 +13,12 @@ const {
   saveJobs
 } = require("../database/saveJobs");
 
+const {
+  getMaxPostedAgeDays,
+  toNaukriPostedWithinDays,
+  checkFreshness
+} = require("../processors/freshness");
+
 /**
  * HireIntel - Naukri Scraper Adapter
  *
@@ -540,6 +546,20 @@ async function scrape({
   );
 
   /**
+   * Only jobs posted within the last N days
+   * (HIREINTEL_MAX_POSTED_AGE_DAYS, default 7).
+   */
+  const maxAgeDays =
+    getMaxPostedAgeDays();
+
+  const postedWithinDays =
+    toNaukriPostedWithinDays(maxAgeDays);
+
+  console.log(
+    `Posted within: ${maxAgeDays} days (Naukri filter: ${postedWithinDays})`
+  );
+
+  /**
    * Naukri uses the same persistent
    * budget protection as all production
    * Apify sources.
@@ -574,7 +594,8 @@ async function scrape({
           [keyword.trim()],
         maxJobs,
         includeJobDescription,
-        monitorMode
+        monitorMode,
+        postedWithinDays
       },
 
       estimatedCostUsd,
@@ -598,6 +619,8 @@ async function scrape({
   const skippedJobs = [];
 
   const processingFailures = [];
+
+  const staleJobs = [];
 
   /**
    * Process every returned job.
@@ -630,6 +653,31 @@ async function scrape({
       console.log(
         `Skipping invalid job: ${validation.reason}`
       );
+
+      continue;
+    }
+
+    /**
+     * Drop jobs older than the posting window,
+     * even if the actor returned them.
+     */
+    const freshness =
+      checkFreshness(
+        getPostedDate(item),
+        { maxAgeDays }
+      );
+
+    if (!freshness.keep) {
+      staleJobs.push({
+        company:
+          item?.company || null,
+        title:
+          item?.title || null,
+        posted_days_ago:
+          item?.posted_days_ago ?? null,
+        reason:
+          freshness.reason
+      });
 
       continue;
     }
@@ -681,6 +729,10 @@ async function scrape({
 
   console.log(
     `Skipped invalid jobs: ${skippedJobs.length}`
+  );
+
+  console.log(
+    `Skipped older than ${maxAgeDays} days: ${staleJobs.length}`
   );
 
   console.log(
@@ -849,6 +901,8 @@ async function scrape({
     jobs,
 
     skippedJobs,
+
+    staleJobs,
 
     processingFailures,
 
@@ -1066,6 +1120,7 @@ if (
 
 module.exports = {
   scrape,
+  getPostedDate,
   mapNaukriJob,
   parseNaukriSalary,
   detectWorkMode,

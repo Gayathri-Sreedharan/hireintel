@@ -898,6 +898,27 @@ HIREINTEL_MAX_TOTAL_CHARGE_USD
 
 Provides a maximum charge parameter for supported Apify executions.
 
+HIREINTEL_MAX_POSTED_AGE_DAYS
+
+Only jobs posted within this many days are kept (default 7). The window is
+applied twice: the Apify actors are asked for recent jobs only (Naukri
+postedWithinDays, LinkedIn datePosted plus sortBy recent), and every returned
+job is checked again in src/processors/freshness.js. Older jobs are skipped,
+counted as "Skipped older than N days" in the run log, and never saved to
+Supabase or included in the CSV.
+
+HIREINTEL_KEEP_UNDATED_JOBS
+
+Set to true to keep jobs that have no readable posting date. Default false.
+
+HIREINTEL_LINKEDIN_DATE_POSTED
+
+Optional override for the LinkedIn actor's datePosted value ("1", "7", "30").
+
+Test the filter offline (no Apify, Supabase or email calls):
+
+npm test
+
 26. Daily CSV Reporting
 
 CSV generation is handled by:
